@@ -68,15 +68,15 @@ def financialPhraseBankDataset(dir_):
     data_50 = os.path.join(fb_path, 'Sentences_50Agree.txt')
     sent_50 = []
     rand_idx = 45
-    
+
     with open(data_50, 'rb') as fi:
         for l in fi:
             l = l.decode('utf-8', 'replace')
             sent_50.append(l.strip())
-    
+
     x_y_list_50 = [sent.split("@") for sent in sent_50]
     x50, y50 = transform_labels(x_y_list_50)
-    
+
     data = [x50, y50]
     X_train, X_test, y_train, y_test = train_test_split(data[0], data[1], test_size=0.1, random_state=rand_idx, stratify=data[1])
 
@@ -84,7 +84,5 @@ def financialPhraseBankDataset(dir_):
     y_test = pd.get_dummies(y_test).values.tolist()
     X_train = X_train.tolist()
     X_test = X_test.tolist()
-            
-    final_data = [X_train, X_test, y_train, y_test] 
-     
-    return final_data
+
+    return [X_train, X_test, y_train, y_test]
