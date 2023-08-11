@@ -33,10 +33,8 @@ class BertClassification(nn.Module):
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, graphEmbeddings=None):
         _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask)
         pooled_output = self.dropout(pooled_output)
-       
-        logits = self.classifier(pooled_output)
-            
-        return logits
+
+        return self.classifier(pooled_output)
 
 class dense_opt():
     def __init__(self, model):

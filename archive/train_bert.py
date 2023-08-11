@@ -15,110 +15,109 @@ from sklearn.metrics import f1_score
 
 def train_model(model, model_type, path, criterion, optimizer, scheduler, device, num_epochs=100, early_stopping = 7):
     model.to(device)
-    log_file =  os.path.join(path, "{}_log.txt".format(model_type))
-    model_path = os.path.join(path, "{}.pth".format(model_type))
-    wo= open(log_file, 'w')
-    
-    since = time.time()
-    print('starting')
-    wo.write('starting \n')
-    best_loss = 100
-    best_accuracy = 0 
-    best_f1 = 0
-    early_stopping_count = 0
-    
-    for epoch in range(num_epochs):
-        if (early_stopping_count >= early_stopping):
-            break 
-        
-        print('Epoch {}/{}'.format(epoch, num_epochs - 1))
-        wo.write('Epoch {}/{} \n'.format(epoch, num_epochs - 1))
-        print('-' * 10)
-        wo.write('-' * 10 + "\n")
+    log_file = os.path.join(path, f"{model_type}_log.txt")
+    model_path = os.path.join(path, f"{model_type}.pth")
+    with open(log_file, 'w') as wo:
+        since = time.time()
+        print('starting')
+        wo.write('starting \n')
+        best_loss = 100
+        best_accuracy = 0
+        best_f1 = 0
+        early_stopping_count = 0
 
-        # Each epoch has a training and validation phase
-        for phase in ['train', 'val']:
-            if phase == 'train':
-                scheduler.step()
-                model.train()  # Set model to training mode
-                early_stopping_count +=1
+        for epoch in range(num_epochs):
+            if (early_stopping_count >= early_stopping):
+                break 
 
-            else:
-                model.eval()   # Set model to evaluate mode
+            print(f'Epoch {epoch}/{num_epochs - 1}')
+            wo.write(f'Epoch {epoch}/{num_epochs - 1} \n')
+            print('-' * 10)
+            wo.write('-' * 10 + "\n")
 
-            running_loss = 0.0
-            sentiment_corrects = 0
-            actual = torch.tensor([]).long().to(device)
-            pred = torch.tensor([]).long().to(device)
+                    # Each epoch has a training and validation phase
+            for phase in ['train', 'val']:
+                if phase == 'train':
+                    scheduler.step()
+                    model.train()  # Set model to training mode
+                    early_stopping_count +=1
 
-            # Iterate over data.
-            for inputs, sentiment in dataloaders_dict[phase]:
-           
-                input_ids = inputs["input_ids"].to(device)
-                token_type_ids = inputs["token_type_ids"].to(device)
-                attention_mask  =  inputs["attention_mask"].to(device)
-                sentiment = sentiment.to(device)
-                
-                # zero the parameter gradients
-                optimizer.zero_grad()
+                else:
+                    model.eval()   # Set model to evaluate mode
 
-                # forward
-                # track history if only in train
-                with torch.set_grad_enabled(phase == 'train'):
-                    outputs = model(input_ids, token_type_ids, attention_mask)
-                    outputs = F.softmax(outputs,dim=1)
-                    loss = criterion(outputs, torch.max(sentiment.float(), 1)[1])
-        
-                    # backward + optimize only if in training phase
-                    if phase == 'train':
-                        loss.backward()
-                        optimizer.step()
+                running_loss = 0.0
+                sentiment_corrects = 0
+                actual = torch.tensor([]).long().to(device)
+                pred = torch.tensor([]).long().to(device)
 
-                # statistics
-                running_loss += loss.item() * input_ids.size(0)
-                sentiment_corrects += torch.sum(torch.max(outputs, 1)[1] == torch.max(sentiment, 1)[1])
-                actual = torch.cat([actual, torch.max(outputs, 1)[1]], dim=0)
-                pred= torch.cat([pred, torch.max(sentiment, 1)[1]], dim=0)
-            epoch_loss = running_loss / dataset_sizes[phase]
+                # Iterate over data.
+                for inputs, sentiment in dataloaders_dict[phase]:
 
-            sentiment_acc = sentiment_corrects.double() / dataset_sizes[phase]
-            assert(len(actual) == len(pred))
-            assert(len(actual) == dataset_sizes[phase])
-            f1 = f1_score(actual.cpu().numpy(), pred.cpu().numpy(), average='weighted')
-            
-            print('{} total loss (avg): {:.4f} '.format(phase,epoch_loss ))
-            wo.write('{} total loss: {:.4f} \n'.format(phase,epoch_loss ))
-            print('{} sentiment_acc: {:.4f}'.format(phase, sentiment_acc))
-            wo.write('{} sentiment_acc: {:.4f} \n'.format(phase, sentiment_acc))
-            print('{} f1-score: {:.4f}'.format(phase, f1))
-            wo.write('{} f1-score:: {:.4f} \n'.format(phase, f1))
+                    input_ids = inputs["input_ids"].to(device)
+                    token_type_ids = inputs["token_type_ids"].to(device)
+                    attention_mask  =  inputs["attention_mask"].to(device)
+                    sentiment = sentiment.to(device)
 
-            if phase == 'val' and epoch_loss < best_loss:
-                print('saving with loss of {}'.format(epoch_loss),
-                      'improved over previous {}'.format(best_loss))
-                wo.write('saving with loss of {} \n'.format(epoch_loss))
-                wo.write('improved over previous {} \n'.format(best_loss))
-                wo.write("\n")
-                best_loss = epoch_loss
-                best_accuracy = sentiment_acc
-                best_f1 = f1
-                best_model_wts = copy.deepcopy(model.state_dict())
-                torch.save(model.state_dict(), model_path)
-                early_stopping_count = 0
-        print()
+                    # zero the parameter gradients
+                    optimizer.zero_grad()
 
-    time_elapsed = time.time() - since
-    print('Training complete in {:.0f}m {:.0f}s'.format(
-        time_elapsed // 60, time_elapsed % 60))
-    wo.write('Training complete in {:.0f}m {:.0f}s \n'.format(
-        time_elapsed // 60, time_elapsed % 60))
+                    # forward
+                    # track history if only in train
+                    with torch.set_grad_enabled(phase == 'train'):
+                        outputs = model(input_ids, token_type_ids, attention_mask)
+                        outputs = F.softmax(outputs,dim=1)
+                        loss = criterion(outputs, torch.max(sentiment.float(), 1)[1])
 
-    print('Best val Acc: {:8f}'.format(float(best_accuracy)))
-    wo.write('Best val Acc: {:8f} \n'.format(float(best_accuracy)))
-    print('Best val f1: {:8f}'.format(float(best_f1)))
-    wo.write('Best val f1: {:8f} \n'.format(float(best_f1)))
-    wo.close()
-    
+                        # backward + optimize only if in training phase
+                        if phase == 'train':
+                            loss.backward()
+                            optimizer.step()
+
+                    # statistics
+                    running_loss += loss.item() * input_ids.size(0)
+                    sentiment_corrects += torch.sum(torch.max(outputs, 1)[1] == torch.max(sentiment, 1)[1])
+                    actual = torch.cat([actual, torch.max(outputs, 1)[1]], dim=0)
+                    pred= torch.cat([pred, torch.max(sentiment, 1)[1]], dim=0)
+                epoch_loss = running_loss / dataset_sizes[phase]
+
+                sentiment_acc = sentiment_corrects.double() / dataset_sizes[phase]
+                assert(len(actual) == len(pred))
+                assert(len(actual) == dataset_sizes[phase])
+                f1 = f1_score(actual.cpu().numpy(), pred.cpu().numpy(), average='weighted')
+
+                print('{} total loss (avg): {:.4f} '.format(phase,epoch_loss ))
+                wo.write('{} total loss: {:.4f} \n'.format(phase,epoch_loss ))
+                print('{} sentiment_acc: {:.4f}'.format(phase, sentiment_acc))
+                wo.write('{} sentiment_acc: {:.4f} \n'.format(phase, sentiment_acc))
+                print('{} f1-score: {:.4f}'.format(phase, f1))
+                wo.write('{} f1-score:: {:.4f} \n'.format(phase, f1))
+
+                if phase == 'val' and epoch_loss < best_loss:
+                    print(
+                        f'saving with loss of {epoch_loss}',
+                        f'improved over previous {best_loss}',
+                    )
+                    wo.write(f'saving with loss of {epoch_loss} \n')
+                    wo.write(f'improved over previous {best_loss} \n')
+                    wo.write("\n")
+                    best_loss = epoch_loss
+                    best_accuracy = sentiment_acc
+                    best_f1 = f1
+                    best_model_wts = copy.deepcopy(model.state_dict())
+                    torch.save(model.state_dict(), model_path)
+                    early_stopping_count = 0
+            print()
+
+        time_elapsed = time.time() - since
+        print('Training complete in {:.0f}m {:.0f}s'.format(
+            time_elapsed // 60, time_elapsed % 60))
+        wo.write('Training complete in {:.0f}m {:.0f}s \n'.format(
+            time_elapsed // 60, time_elapsed % 60))
+
+        print('Best val Acc: {:8f}'.format(float(best_accuracy)))
+        wo.write('Best val Acc: {:8f} \n'.format(float(best_accuracy)))
+        print('Best val f1: {:8f}'.format(float(best_f1)))
+        wo.write('Best val f1: {:8f} \n'.format(float(best_f1)))
     # load best model weights
     model.load_state_dict(best_model_wts)
 
